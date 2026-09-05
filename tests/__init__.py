@@ -1,0 +1,1 @@
+"""AutoInsights test suite."""

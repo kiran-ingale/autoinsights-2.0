@@ -1,0 +1,13 @@
+order_date,region,category,channel,units_sold,revenue,discount_pct,customer_satisfaction
+2026-01-05,North,Electronics,Online,24,3600,5,4.5
+2026-01-12,South,Home,Store,18,1440,10,4.1
+2026-02-03,East,Electronics,Online,31,5270,0,4.7
+2026-02-19,West,Clothing,Store,42,1890,15,3.9
+2026-03-08,North,Home,Online,27,2295,5,4.3
+2026-03-22,South,Electronics,Store,16,2560,10,4.0
+2026-04-11,East,Clothing,Online,36,1980,0,4.6
+2026-04-27,West,Home,Store,22,1870,5,4.2
+2026-05-09,North,Electronics,Online,29,4640,0,4.8
+2026-05-24,South,Clothing,Store,38,1710,20,3.8
+2026-06-06,East,Home,Online,25,2250,10,4.4
+2026-06-21,West,Electronics,Store,19,3230,5,4.1

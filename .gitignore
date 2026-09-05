@@ -1,0 +1,22 @@
+# Python environments and caches
+.venv/
+venv/
+myenv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local configuration and generated run outputs
+.env
+artifacts/*
+!artifacts/.gitkeep
+
+# Streamlit and editor files
+.streamlit/secrets.toml
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
