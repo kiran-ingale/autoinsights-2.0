@@ -10,7 +10,19 @@ from typing import BinaryIO, Literal, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from app.config import ARTIFACTS_DIR
+from app.agents import (
+    cleaning_agent,
+    eda_agent,
+    feature_engineering_agent,
+    intake_agent,
+    insight_agent,
+    profiling_agent,
+    sample_acquisition_agent,
+    statistics_agent,
+    upload_source_agent,
+    visualization_agent,
+)
+from app.config import ARTIFACTS_DIR, MAX_UPLOAD_BYTES
 from app.schemas import (
     AnalysisRequest,
     AnalysisState,
@@ -34,92 +46,6 @@ def _progress_update(
     return {"progress": [*state["progress"], event]}
 
 
-def intake_agent(state: AnalysisState) -> dict[str, object]:
-    """Placeholder for request and CSV validation in Step 4."""
-
-    return _progress_update(
-        state,
-        agent="Intake Agent",
-        message="Request accepted; validation will be implemented in Step 4.",
-    )
-
-
-def upload_source_agent(state: AnalysisState) -> dict[str, object]:
-    """Placeholder for processing an uploaded file in Step 4."""
-
-    return _progress_update(
-        state,
-        agent="Uploaded Data Source",
-        message="Uploaded-data path selected; CSV persistence will be implemented in Step 4.",
-    )
-
-
-def sample_acquisition_agent(state: AnalysisState) -> dict[str, object]:
-    """Placeholder for selecting the bundled sample dataset in Step 4."""
-
-    return _progress_update(
-        state,
-        agent="Data Acquisition Agent",
-        message="Sample-data path selected; acquisition will be implemented in Step 4.",
-    )
-
-
-def profiling_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Data Profiling Agent",
-        message="Profiling placeholder completed.",
-    )
-
-
-def cleaning_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Data Cleaning Agent",
-        message="Cleaning placeholder completed.",
-    )
-
-
-def eda_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="EDA Agent",
-        message="Exploratory analysis placeholder completed.",
-    )
-
-
-def feature_engineering_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Feature Engineering Agent",
-        message="Feature preparation placeholder completed.",
-    )
-
-
-def statistics_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Statistical Analysis Agent",
-        message="Statistical analysis placeholder completed.",
-    )
-
-
-def insight_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Insight Generation Agent",
-        message="Insight generation placeholder completed.",
-    )
-
-
-def visualization_agent(state: AnalysisState) -> dict[str, object]:
-    return _progress_update(
-        state,
-        agent="Visualization Agent",
-        message="Visualization metadata placeholder completed.",
-    )
-
-
 def reporting_handoff_agent(state: AnalysisState) -> dict[str, object]:
     """Finish the skeleton run; report generation is implemented in Step 8."""
 
@@ -140,6 +66,31 @@ def route_source(state: AnalysisState) -> Literal["upload_source", "sample_acqui
     return "sample_acquisition"
 
 
+def route_after_intake(state: AnalysisState) -> Literal["upload_source", "sample_acquisition", "failure_handoff"]:
+    """Stop immediately when intake determines a run cannot proceed."""
+
+    if state["status"] is RunStatus.FAILED:
+        return "failure_handoff"
+    return route_source(state)
+
+
+def route_after_source(state: AnalysisState) -> Literal["profiling", "failure_handoff"]:
+    """Do not profile if source parsing or acquisition failed."""
+
+    return "failure_handoff" if state["status"] is RunStatus.FAILED else "profiling"
+
+
+def failure_handoff_agent(state: AnalysisState) -> dict[str, object]:
+    """Terminal path that retains a friendly error state for Streamlit."""
+
+    return _progress_update(
+        state,
+        agent="Workflow Manager",
+        message="Analysis stopped because the input could not be processed.",
+        level="error",
+    )
+
+
 def build_analysis_graph():
     """Compile the workflow graph used by the prototype."""
 
@@ -155,11 +106,12 @@ def build_analysis_graph():
     graph.add_node("insights", insight_agent)
     graph.add_node("visualization", visualization_agent)
     graph.add_node("reporting_handoff", reporting_handoff_agent)
+    graph.add_node("failure_handoff", failure_handoff_agent)
 
     graph.add_edge(START, "intake")
-    graph.add_conditional_edges("intake", route_source)
-    graph.add_edge("upload_source", "profiling")
-    graph.add_edge("sample_acquisition", "profiling")
+    graph.add_conditional_edges("intake", route_after_intake)
+    graph.add_conditional_edges("upload_source", route_after_source)
+    graph.add_conditional_edges("sample_acquisition", route_after_source)
     graph.add_edge("profiling", "cleaning")
     graph.add_edge("cleaning", "eda")
     graph.add_edge("eda", "feature_engineering")
@@ -168,6 +120,7 @@ def build_analysis_graph():
     graph.add_edge("insights", "visualization")
     graph.add_edge("visualization", "reporting_handoff")
     graph.add_edge("reporting_handoff", END)
+    graph.add_edge("failure_handoff", END)
 
     return graph.compile()
 
@@ -186,13 +139,22 @@ def run_analysis(
     integration contract before the agent implementations are added.
     """
 
-    _ = uploaded_file
+    source_csv: str | None = None
+    if request.source_type is SourceType.UPLOAD and uploaded_file is not None:
+        contents = uploaded_file.read(MAX_UPLOAD_BYTES + 1)
+        if len(contents) <= MAX_UPLOAD_BYTES:
+            try:
+                source_csv = contents.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                source_csv = None
     initial_state: AnalysisState = {
         "request": request,
         "artifacts": build_artifact_paths(ARTIFACTS_DIR, request.run_id),
         "status": RunStatus.RUNNING,
         "input_path": None,
         "cleaned_path": None,
+        "source_csv": source_csv,
+        "data_records": [],
         "progress": [],
         "warnings": [],
         "errors": [],

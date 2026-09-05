@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from app.graph.workflow import run_analysis
 from app.schemas import AnalysisRequest, RunStatus, SourceType
 
@@ -24,7 +26,8 @@ def test_upload_request_uses_the_upload_branch() -> None:
             run_id="upload-run",
             problem_statement="Find sales patterns",
             source_type=SourceType.UPLOAD,
-        )
+        ),
+        uploaded_file=BytesIO(b"region,revenue\nNorth,100\nSouth,200\n"),
     )
 
     agents = [event["agent"] for event in state["progress"]]

@@ -75,6 +75,8 @@ class AnalysisState(TypedDict):
     status: RunStatus
     input_path: str | None
     cleaned_path: str | None
+    source_csv: str | None
+    data_records: list[dict[str, Any]]
     progress: list[ProgressEvent]
     warnings: list[str]
     errors: list[str]
@@ -87,4 +89,3 @@ class AnalysisState(TypedDict):
     insights: NotRequired[list[dict[str, str]]]
     chart_specs: NotRequired[list[dict[str, Any]]]
     report_path: NotRequired[str]
-
