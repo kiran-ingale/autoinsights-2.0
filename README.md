@@ -4,15 +4,17 @@ AutoInsights is an agentic data-analysis application that turns a business quest
 
 This prototype uses Streamlit for the interactive experience and LangGraph to coordinate specialized analysis agents. It intentionally does not include a separate backend service.
 
+The dashboard also includes a Mistral-powered chatbox. It answers questions about the current analysis and routes explicit supported requests, such as executing an already-approved cleaning plan or locating the current report, to the appropriate local agent.
+
 ## What it does
 
 1. Accepts a problem statement, domain, constraints, and an optional CSV file.
 2. Profiles the dataset and flags missing data, duplicates, anomalous values, and schema issues.
-3. Cleans data and records each transformation.
-4. Performs exploratory analysis and creates interactive charts.
-5. Prepares useful features and runs lightweight statistical analysis.
-6. Converts findings into plain-language insights and actionable recommendations.
-7. Presents results in an interactive Streamlit dashboard, produces an HTML report, and preserves the run artifacts for auditability.
+3. Profiles the original data, creates an initial dashboard, and explains the proposed cleaning actions.
+4. Waits for the user to explicitly approve cleaning; no transformations are applied automatically.
+5. Cleans approved data and records each transformation.
+6. Re-runs exploratory analysis, visualizations, statistics, and insights on the cleaned data.
+7. Presents the final interactive Streamlit dashboard, produces an HTML report, and preserves the run artifacts for auditability.
 
 If no dataset is supplied, the system initially supports safe sample-dataset acquisition for demonstration. Extensible data-source adapters can later add approved APIs, UCI, or Kaggle integrations.
 
@@ -44,7 +46,12 @@ Run artifacts: cleaned CSV, charts, transformation log, report
 
 The graph owns the shared `AnalysisState`, which includes the request, dataset locations, diagnostics, artifacts, messages, and errors. Nodes add structured results to state instead of passing untracked files directly between agents.
 
-The manager logic uses conditional edges to choose the data-acquisition path when a dataset was not uploaded and routes failures to a terminal error state. Every run receives a unique ID and isolated artifact directory.
+The manager logic uses conditional edges to choose the data-acquisition path when a dataset was not uploaded, routes failures to a terminal error state, and pauses at a human approval gate before cleaning. Every run receives a unique ID and isolated artifact directory.
+
+```text
+Raw-data assessment → Initial dashboard + proposed cleaning plan
+    → User approves cleaning → Cleaned-data assessment → Final dashboard + report
+```
 
 | Agent | Responsibility | Primary output |
 | --- | --- | --- |
@@ -94,11 +101,24 @@ The implementation will use Python 3.11+ and a virtual environment.
 ```bash
 python -m venv .venv
 .venv\\Scripts\\activate
-pip install -e ".[dev]"
+pip install -r requirements.txt
 streamlit run frontend/streamlit_app.py
 ```
 
 Streamlit invokes the graph in-process and writes every run to its own artifact directory. Status containers and session state display workflow progress without a separate API or job queue.
+
+### Mistral chat setup
+
+Copy the supplied `.env` values or edit the local `.env` file and add your Mistral key:
+
+```text
+MISTRAL_API_KEY=your_key_here
+MISTRAL_MODEL=mistral-small-latest
+GROQ_API_KEY=your_key_here
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
+Restart Streamlit after adding a key. In the sidebar's **Chat model settings**, choose **Auto**, **Mistral**, or **Groq**. Selecting Mistral or Groq also lets you enter a model ID for that chat request; it must be enabled for your API key. Auto uses Mistral first and then Groq if Mistral is unavailable or rate-limited. The keys remain local because `.env` is excluded from Git. The chat router receives compact analysis context, such as profile metrics, findings, warnings, and cleaning plans; it does not send raw CSV rows to either provider.
 
 ## Dashboard experience
 
@@ -119,7 +139,7 @@ The initial dashboard uses a small number of meaningful global controls: a date 
 
 1. **Foundation:** Python package, settings, Streamlit shell, and local artifact storage.
 2. **Workflow:** Typed LangGraph state, all agent nodes, conditional routing, and run lifecycle tracking.
-3. **Analysis:** CSV upload, profile/clean/EDA/statistics agents, charts, dashboard data, and HTML reporting.
+3. **Analysis:** CSV upload, raw-data assessment, user-approved cleaning, EDA/statistics agents, charts, dashboard data, and HTML reporting.
 4. **Dashboard:** Streamlit KPI cards, filters, Plotly charts, cleaned-data explorer, and download controls.
 5. **Product polish:** Streamlit run progress, artifact downloads, input validation, error display, and tests.
 6. **Extensions:** authenticated external sources, LLM-powered narrative generation, model training, PDF export, persistent job storage, and an optional FastAPI API for multi-user or integration scenarios.

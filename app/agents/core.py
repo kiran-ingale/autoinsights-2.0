@@ -133,7 +133,7 @@ def profiling_agent(state: AnalysisState) -> dict[str, object]:
     return {
         "profile": profile,
         "dataframe_metadata": metadata,
-        "warnings": [*state["warnings"], *warnings],
+        "warnings": warnings,
         "progress": _progress(
             state,
             _event("Data Profiling Agent", "Profiled schema, missing values, duplicates, and numeric summaries."),
@@ -212,5 +212,57 @@ def cleaning_agent(state: AnalysisState) -> dict[str, object]:
         "progress": _progress(
             state,
             _event("Data Cleaning Agent", f"Completed {len(transformations)} deterministic transformation(s)."),
+        ),
+    }
+
+
+def cleaning_plan_agent(state: AnalysisState) -> dict[str, object]:
+    """Describe intended cleaning actions without modifying the dataset."""
+
+    frame = _frame_from_state(state)
+    preview = frame.copy()
+    plan: list[dict[str, Any]] = []
+    normalized = _normalized_columns(frame.columns)
+    if list(frame.columns) != normalized:
+        plan.append({"action": "normalize_column_names", "details": "Convert column names to snake_case."})
+        preview.columns = normalized
+
+    text_columns = frame.select_dtypes(include="object").columns.tolist()
+    whitespace_cells = sum(
+        int((frame[column].dropna().astype(str) != frame[column].dropna().astype(str).str.strip()).sum())
+        for column in text_columns
+    )
+    if whitespace_cells:
+        plan.append({"action": "trim_text_values", "rows_affected": whitespace_cells, "details": "Trim leading and trailing whitespace."})
+    for column in preview.select_dtypes(include="object").columns:
+        preview[column] = preview[column].str.strip().replace("", pd.NA)
+
+    duplicate_count = int(preview.duplicated().sum())
+    if duplicate_count:
+        plan.append({"action": "remove_duplicates", "rows_affected": duplicate_count, "details": "Remove exact duplicate rows."})
+
+    for column in preview.columns:
+        missing_count = int(preview[column].isna().sum())
+        if not missing_count:
+            continue
+        strategy = "impute_numeric_median" if pd.api.types.is_numeric_dtype(preview[column]) else "impute_categorical_mode"
+        plan.append(
+            {
+                "action": strategy,
+                "column": column,
+                "rows_affected": missing_count,
+                "details": "Fill missing values using the median." if strategy == "impute_numeric_median" else "Fill missing values using the most frequent value.",
+            }
+        )
+
+    if not plan:
+        plan.append({"action": "no_changes", "details": "No deterministic cleaning actions are currently required."})
+
+    return {
+        "cleaning_plan": plan,
+        "status": RunStatus.AWAITING_CLEANING_APPROVAL,
+        "progress": _progress(
+            state,
+            _event("Data Cleaning Agent", "Prepared a cleaning plan and is awaiting user approval."),
         ),
     }

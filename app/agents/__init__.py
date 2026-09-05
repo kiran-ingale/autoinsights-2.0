@@ -2,6 +2,7 @@
 
 from app.agents.core import (
     cleaning_agent,
+    cleaning_plan_agent,
     intake_agent,
     profiling_agent,
     sample_acquisition_agent,
@@ -17,6 +18,7 @@ from app.agents.analysis import (
 
 __all__ = [
     "cleaning_agent",
+    "cleaning_plan_agent",
     "intake_agent",
     "profiling_agent",
     "sample_acquisition_agent",

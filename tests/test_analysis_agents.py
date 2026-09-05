@@ -12,7 +12,7 @@ def test_sample_run_produces_analytical_results_and_chart_specs() -> None:
     )
 
     chart_types = {spec["type"] for spec in state["chart_specs"]}
-    assert state["status"] is RunStatus.COMPLETED
+    assert state["status"] is RunStatus.AWAITING_CLEANING_APPROVAL
     assert state["observations"]
     assert state["statistics"]["strongest_correlation"] is not None
     assert state["insights"]

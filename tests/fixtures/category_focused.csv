@@ -1,0 +1,13 @@
+category,channel,revenue,units_sold
+Electronics,Online,5200,32
+Electronics,Store,4100,26
+Home,Online,2800,31
+Home,Store,2300,27
+Clothing,Online,1900,44
+Clothing,Store,2200,51
+Beauty,Online,1600,38
+Beauty,Store,1500,35
+Sports,Online,3100,22
+Sports,Store,2900,21
+Books,Online,900,48
+Books,Store,1100,56

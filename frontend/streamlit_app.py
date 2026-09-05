@@ -14,9 +14,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.config import MAX_UPLOAD_MB
-from app.graph import run_analysis
+from app.config import GROQ_MODEL, MAX_UPLOAD_MB, MISTRAL_MODEL
+from app.agents.chat import handle_chat_message
+from app.graph import execute_cleaning, run_analysis
 from app.schemas import AnalysisRequest, RunStatus, SourceType
+from frontend.dashboard import render_dashboard
 
 
 st.set_page_config(page_title="AutoInsights", page_icon="📊", layout="wide")
@@ -58,6 +60,8 @@ def _start_run(
                 st.write(f"{event['agent']}: {event['message']}")
         if state["status"] is RunStatus.COMPLETED:
             status.update(label="Analysis workflow complete", state="complete")
+        elif state["status"] is RunStatus.AWAITING_CLEANING_APPROVAL:
+            status.update(label="Raw-data assessment complete — cleaning approval required", state="complete")
         else:
             status.update(label="Analysis workflow stopped", state="error")
 
@@ -65,7 +69,7 @@ def _start_run(
 
 
 def _show_run_summary() -> None:
-    """Display the result handoff until the full dashboard is added in Step 7."""
+    """Display the raw or cleaned dashboard for the current workflow state."""
 
     state = st.session_state.get("analysis_state")
     if not state:
@@ -77,23 +81,77 @@ def _show_run_summary() -> None:
             st.write(f"- {error}")
         return
 
-    profile = state.get("profile", {})
-    st.success(f"Run `{state['request'].run_id}` completed.")
-    first, second, third = st.columns(3)
-    first.metric("Rows analyzed", profile.get("row_count", "-"))
-    second.metric("Columns", profile.get("column_count", "-"))
-    third.metric("Charts prepared", len(state.get("chart_specs", [])))
-
+    if state["status"] is RunStatus.AWAITING_CLEANING_APPROVAL:
+        st.info("Raw-data assessment complete. Review the cleaning plan, then choose whether to apply it.")
+    else:
+        st.success(f"Run `{state['request'].run_id}` completed after approved cleaning.")
     if state["warnings"]:
-        st.subheader("Data-quality warnings")
+        st.subheader("Data-quality notices")
         for warning in state["warnings"]:
             st.warning(warning)
+    render_dashboard(state)
 
-    st.subheader("Workflow handoff")
-    st.write(
-        "The analysis state is ready. Step 7 will render the prepared charts, "
-        "data explorer, findings, and downloads as the interactive dashboard."
-    )
+    report_path = state.get("assessment_report_path") if state["status"] is RunStatus.AWAITING_CLEANING_APPROVAL else state.get("report_path")
+    if report_path and Path(report_path).is_file():
+        st.download_button(
+            "Download current HTML report",
+            data=Path(report_path).read_bytes(),
+            file_name=Path(report_path).name,
+            mime="text/html",
+        )
+
+    if state["status"] is RunStatus.AWAITING_CLEANING_APPROVAL:
+        st.subheader("Proposed cleaning plan")
+        st.caption("No transformations have been applied yet. The dashboard above reflects the original data.")
+        st.dataframe(state.get("cleaning_plan", []), use_container_width=True, hide_index=True)
+        if st.button("Execute cleaning and refresh analysis", type="primary"):
+            with st.status("Applying approved cleaning and refreshing the analysis...", expanded=True) as status:
+                updated_state = execute_cleaning(state)
+                for event in updated_state["progress"][len(state["progress"]) :]:
+                    st.write(f"{event['agent']}: {event['message']}")
+                status.update(label="Cleaning and final analysis complete", state="complete")
+            st.session_state.analysis_state = updated_state
+            st.rerun()
+
+
+def _render_chat() -> None:
+    """Render the Mistral-assisted chat entry point and retain conversation history."""
+
+    st.divider()
+    st.subheader("Ask AutoInsights")
+    st.caption("Ask about findings, charts, data quality, cleaning, or reports. The assistant can execute only supported analysis actions.")
+    with st.sidebar:
+        with st.expander("Chat model settings"):
+            provider_label = st.selectbox("Provider", ["Auto", "Mistral", "Groq"], help="Auto tries Mistral first, then Groq.")
+            if provider_label == "Mistral":
+                selected_model = st.text_input("Mistral model", value=MISTRAL_MODEL)
+            elif provider_label == "Groq":
+                selected_model = st.text_input("Groq model", value=GROQ_MODEL)
+            else:
+                selected_model = ""
+    history = st.session_state.setdefault("chat_history", [])
+    for item in history:
+        with st.chat_message(item["role"]):
+            st.write(item["content"])
+
+    message = st.chat_input("Ask about this analysis or request a supported action")
+    if not message:
+        return
+    history.append({"role": "user", "content": message})
+    with st.chat_message("user"):
+        st.write(message)
+    with st.chat_message("assistant"):
+        result, updated_state = handle_chat_message(
+            message,
+            st.session_state.get("analysis_state"),
+            provider=provider_label.lower(),
+            model=selected_model or None,
+        )
+        st.write(result.response)
+    history.append({"role": "assistant", "content": result.response})
+    if result.state_changed:
+        st.session_state.analysis_state = updated_state
+        st.rerun()
 
 
 st.title("AutoInsights")
@@ -119,3 +177,4 @@ if submitted:
     _start_run(problem_statement, domain, constraints, uploaded_file, use_sample_data)
 
 _show_run_summary()
+_render_chat()

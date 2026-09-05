@@ -20,6 +20,7 @@ class RunStatus(StrEnum):
 
     PENDING = "pending"
     RUNNING = "running"
+    AWAITING_CLEANING_APPROVAL = "awaiting_cleaning_approval"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -84,8 +85,10 @@ class AnalysisState(TypedDict):
     dataframe_metadata: NotRequired[dict[str, Any]]
     profile: NotRequired[dict[str, Any]]
     transformations: NotRequired[list[dict[str, Any]]]
+    cleaning_plan: NotRequired[list[dict[str, Any]]]
     observations: NotRequired[list[str]]
     statistics: NotRequired[dict[str, Any]]
     insights: NotRequired[list[dict[str, str]]]
     chart_specs: NotRequired[list[dict[str, Any]]]
+    assessment_report_path: NotRequired[str]
     report_path: NotRequired[str]

@@ -1,4 +1,4 @@
-"""Workflow callable contract; implementation follows in Step 3."""
+"""Workflow callable contract used by the Streamlit application."""
 
 from __future__ import annotations
 
