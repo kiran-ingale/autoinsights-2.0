@@ -118,7 +118,7 @@ def dispatch_intent(intent: ChatIntent, state: AnalysisState | None) -> tuple[Ch
 
 
 def _offline_fallback(message: str, state: AnalysisState | None) -> tuple[ChatResult, AnalysisState | None]:
-    """Handle a small set of supported requests when Mistral is unreachable."""
+    """Answer supported requests locally when an external provider is unavailable."""
 
     request = message.lower()
     if any(term in request for term in ("clean", "apply", "execute")):
@@ -128,7 +128,7 @@ def _offline_fallback(message: str, state: AnalysisState | None) -> tuple[ChatRe
     if state is None:
         return (
             ChatResult(
-                response="Mistral is unreachable, and no analysis run is available yet. Upload data or use the sample data to start.",
+                response="No analysis run is available yet. Upload data or use the sample data to start.",
                 action="offline_fallback",
             ),
             state,
@@ -136,11 +136,11 @@ def _offline_fallback(message: str, state: AnalysisState | None) -> tuple[ChatRe
     if any(term in request for term in ("cleaning", "quality", "missing", "duplicate")):
         plan = state.get("cleaning_plan") or state.get("transformations", [])
         details = "; ".join(item.get("action", "") for item in plan) or "No cleaning actions were recorded."
-        return ChatResult(response=f"Mistral is unreachable. Available data-quality actions: {details}.", action="offline_fallback"), state
+        return ChatResult(response=f"Available data-quality actions: {details}.", action="offline_fallback"), state
     insights = state.get("insights", [])
     summary = " ".join(item.get("text", "") for item in insights[:2])
     return ChatResult(
-        response=(f"Mistral is unreachable. Current analysis summary: {summary}" if summary else "Mistral is unreachable. Review the dashboard and report for the current results."),
+        response=(f"Current analysis summary: {summary}" if summary else "Review the dashboard and report for the current results."),
         action="offline_fallback",
     ), state
 
@@ -181,8 +181,6 @@ def handle_chat_message(
             or isinstance(error, OSError)
         ):
             result, updated_state = _offline_fallback(message, state)
-            if result.action == "offline_fallback":
-                result.response = f"The configured AI providers are unreachable. {result.response}"
             return result, updated_state
         if "rate limit" in error_text or "status 429" in error_text or "rate_limited" in error_text:
             result, updated_state = _offline_fallback(message, state)

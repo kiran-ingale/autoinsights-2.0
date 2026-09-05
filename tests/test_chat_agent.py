@@ -112,7 +112,7 @@ def test_connection_error_uses_local_fallback(monkeypatch) -> None:
     result, state = handle_chat_message("What are the findings?", None)
 
     assert result.action == "offline_fallback"
-    assert "unreachable" in result.response
+    assert "No analysis run is available" in result.response
     assert state is None
 
 
